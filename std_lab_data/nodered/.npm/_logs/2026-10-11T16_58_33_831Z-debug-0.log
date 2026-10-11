@@ -1,0 +1,61 @@
+0 verbose cli /usr/local/bin/node /usr/src/node-red/node_modules/npm/bin/npm-cli.js
+1 info using npm@11.16.0
+2 info using node@v24.16.0
+3 silly config load:file:/usr/src/node-red/node_modules/npm/npmrc
+4 silly config load:file:/data/.npmrc
+5 silly config load:file:/usr/src/node-red/.npmrc
+6 silly config load:file:/usr/local/etc/npmrc
+7 verbose title npm install node-red-contrib-influxdb@0.7.0
+8 verbose argv "install" "--no-audit" "--no-update-notifier" "--no-fund" "--save" "--save-prefix" "~" "--omit" "dev" "--engine-strict" "--" "node-red-contrib-influxdb@0.7.0"
+9 verbose logfile logs-max:10 dir:/data/.npm/_logs/2026-10-11T16_58_33_831Z-
+10 verbose logfile /data/.npm/_logs/2026-10-11T16_58_33_831Z-debug-0.log
+11 silly logfile done cleaning log files
+12 silly packumentCache heap:2348810240 maxSize:587202560 maxEntrySize:293601280
+13 silly idealTree buildDeps
+14 silly fetch manifest node-red-contrib-influxdb@0.7.0
+15 silly packumentCache full:https://registry.npmjs.org/node-red-contrib-influxdb cache-miss
+16 http fetch GET 200 https://registry.npmjs.org/node-red-contrib-influxdb 600ms (cache miss)
+17 silly packumentCache full:https://registry.npmjs.org/node-red-contrib-influxdb set size:undefined disposed:false
+18 silly placeDep ROOT node-red-contrib-influxdb@0.7.0 OK for: node-red-project@0.0.1 want: 0.7.0
+19 silly fetch manifest influx@~5.9.3
+20 silly packumentCache full:https://registry.npmjs.org/influx cache-miss
+21 silly fetch manifest @influxdata/influxdb-client@~1.33.2
+22 silly packumentCache full:https://registry.npmjs.org/@influxdata%2finfluxdb-client cache-miss
+23 silly fetch manifest lodash@~4.17.21
+24 silly packumentCache full:https://registry.npmjs.org/lodash cache-miss
+25 http fetch GET 200 https://registry.npmjs.org/lodash 200ms (cache miss)
+26 silly packumentCache full:https://registry.npmjs.org/lodash set size:undefined disposed:false
+27 http fetch GET 200 https://registry.npmjs.org/influx 1219ms (cache miss)
+28 silly packumentCache full:https://registry.npmjs.org/influx set size:undefined disposed:false
+29 http fetch GET 200 https://registry.npmjs.org/@influxdata%2finfluxdb-client 2250ms (cache miss)
+30 silly packumentCache full:https://registry.npmjs.org/@influxdata%2finfluxdb-client set size:undefined disposed:false
+31 silly placeDep ROOT @influxdata/influxdb-client@1.33.2 OK for: node-red-contrib-influxdb@0.7.0 want: ~1.33.2
+32 silly placeDep ROOT influx@5.9.7 OK for: node-red-contrib-influxdb@0.7.0 want: ~5.9.3
+33 silly placeDep ROOT lodash@4.17.23 OK for: node-red-contrib-influxdb@0.7.0 want: ~4.17.21
+34 silly reify moves {}
+35 http cache node-red-contrib-influxdb@https://registry.npmjs.org/node-red-contrib-influxdb/-/node-red-contrib-influxdb-0.7.0.tgz 1ms (cache hit)
+36 http cache influx@https://registry.npmjs.org/influx/-/influx-5.9.7.tgz 0ms (cache hit)
+37 http cache lodash@https://registry.npmjs.org/lodash/-/lodash-4.17.23.tgz 0ms (cache hit)
+38 silly tarball no local data for node-red-contrib-influxdb@https://registry.npmjs.org/node-red-contrib-influxdb/-/node-red-contrib-influxdb-0.7.0.tgz. Extracting by manifest.
+39 silly tarball no local data for lodash@https://registry.npmjs.org/lodash/-/lodash-4.17.23.tgz. Extracting by manifest.
+40 silly tarball no local data for influx@https://registry.npmjs.org/influx/-/influx-5.9.7.tgz. Extracting by manifest.
+41 http cache @influxdata/influxdb-client@https://registry.npmjs.org/@influxdata/influxdb-client/-/influxdb-client-1.33.2.tgz 0ms (cache hit)
+42 silly tarball no local data for @influxdata/influxdb-client@https://registry.npmjs.org/@influxdata/influxdb-client/-/influxdb-client-1.33.2.tgz. Extracting by manifest.
+43 http fetch GET 200 https://registry.npmjs.org/node-red-contrib-influxdb/-/node-red-contrib-influxdb-0.7.0.tgz 1958ms (cache miss)
+44 http fetch GET 200 https://registry.npmjs.org/@influxdata/influxdb-client/-/influxdb-client-1.33.2.tgz 9224ms (cache miss)
+45 http fetch GET 200 https://registry.npmjs.org/influx/-/influx-5.9.7.tgz 10195ms (cache miss)
+46 http fetch GET 200 https://registry.npmjs.org/lodash/-/lodash-4.17.23.tgz 46446ms (cache miss)
+47 silly ADD node_modules/lodash
+48 silly ADD node_modules/influx
+49 silly ADD node_modules/@influxdata/influxdb-client
+50 silly ADD node_modules/node-red-contrib-influxdb
+51 warn allow-scripts 1 package has install scripts not yet covered by allowScripts:
+51 warn allow-scripts   node-red-dashboard@3.6.6 (install: (install scripts present))
+51 warn allow-scripts
+51 warn allow-scripts Run `npm approve-scripts --allow-scripts-pending` to review, or `npm approve-scripts <pkg>` to allow.
+52 verbose cwd /data
+53 verbose os Linux 6.6.114.1-microsoft-standard-WSL2
+54 verbose node v24.16.0
+55 verbose npm  v11.16.0
+56 verbose exit 0
+57 info ok
