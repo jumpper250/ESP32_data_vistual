@@ -49,6 +49,7 @@ void setup() {
   pinMode(RELAY_VALVE, OUTPUT);
   digitalWrite(RELAY_PUMP, 0); 
   digitalWrite(RELAY_VALVE, 0);
+  Serial.printf("[RELAY] Initial GPIO levels: pump=%d, valve=%d\n", digitalRead(RELAY_PUMP), digitalRead(RELAY_VALVE));
 
   lcd.init();
   lcd.backlight();
@@ -56,16 +57,20 @@ void setup() {
   lcd.print("Smart Farm Lab");
 
   dht.begin();
+  Serial.printf("[DHT] DHT22 initialized on GPIO %d\n", DHTPIN);
 
   WiFiManager wm;
   lcd.setCursor(0, 1);
   lcd.print("Connecting WiFi...");
   
+  Serial.println("[WiFi] Connecting; setup AP: SmartFarm_Setup");
   if (!wm.autoConnect("SmartFarm_Setup")) {
+    Serial.println("[WiFi] Connection failed. Restarting in 3 seconds.");
     delay(3000);
     ESP.restart(); 
   }
   
+  Serial.printf("[WiFi] Connected. IP=%s, RSSI=%d dBm\n", WiFi.localIP().toString().c_str(), WiFi.RSSI());
   lcd.setCursor(0, 1);
   lcd.print("WiFi Connected!   ");
   lcd.setCursor(0, 2);
@@ -75,6 +80,7 @@ void setup() {
 
   client.setServer(mqtt_server, mqtt_port);
   client.setCallback(mqttCallback);
+  Serial.printf("[MQTT] Broker=%s:%d, client=%s\n", mqtt_server, mqtt_port, device_id.c_str());
 }
 
 // =========================================================
@@ -89,7 +95,12 @@ void loop() {
       lcd.print("WiFi Config Mode");
       WiFiManager wm;
       wm.setConfigPortalTimeout(180); 
-      if (!wm.startConfigPortal("SmartFarm_Setup")) ESP.restart();
+      Serial.println("[WiFi] Button pressed. Opening SmartFarm_Setup portal (180 seconds).");
+      if (!wm.startConfigPortal("SmartFarm_Setup")) {
+        Serial.println("[WiFi] Portal failed or timed out. Restarting.");
+        ESP.restart();
+      }
+      Serial.printf("[WiFi] Portal complete. Status=%d, IP=%s\n", WiFi.status(), WiFi.localIP().toString().c_str());
       lcd.clear();
     }
   }
@@ -105,7 +116,11 @@ void loop() {
     
     float h = dht.readHumidity();
     float t = dht.readTemperature();
-    if (isnan(h) || isnan(t)) return;
+    if (isnan(h) || isnan(t)) {
+      Serial.println("[DHT] Read failed. Check sensor wiring and power.");
+      return;
+    }
+    Serial.printf("[DHT] Temperature=%.1f C, humidity=%.1f %%, pump GPIO=%d, valve GPIO=%d\n", t, h, digitalRead(RELAY_PUMP), digitalRead(RELAY_VALVE));
 
     lcd.setCursor(0, 0);
     lcd.print("T:" + String(t, 1) + "C P:" + String(digitalRead(RELAY_PUMP)));
@@ -122,7 +137,8 @@ void loop() {
     serializeJson(doc, msgBuffer);
 
     String topic_telemetry = base_topic + "telemetry";
-    client.publish(topic_telemetry.c_str(), msgBuffer);
+    bool sent = client.publish(topic_telemetry.c_str(), msgBuffer);
+    Serial.printf("[MQTT] Telemetry publish %s: topic=%s, payload=%s\n", sent ? "OK" : "FAILED", topic_telemetry.c_str(), msgBuffer);
   }
 }
 
@@ -131,17 +147,22 @@ void loop() {
 // =========================================================
 void reconnect() {
   while (!client.connected()) {
+    Serial.printf("[MQTT] Connecting to %s:%d; WiFi status=%d\n", mqtt_server, mqtt_port, WiFi.status());
     String topic_status = base_topic + "status";
     String willMessage = "{\"status\":\"offline\"}"; 
     
     // ตั้งค่า LWT 
     if (client.connect(device_id.c_str(), NULL, NULL, topic_status.c_str(), 0, true, willMessage.c_str())) {
       String topic_cmd = base_topic + "cmd";
-      client.subscribe(topic_cmd.c_str());
+      Serial.println("[MQTT] Connected.");
+      bool subscribed = client.subscribe(topic_cmd.c_str());
+      Serial.printf("[MQTT] Subscribe %s: %s\n", subscribed ? "OK" : "FAILED", topic_cmd.c_str());
       
       // ทับ LWT ด้วยสถานะ online
-      client.publish(topic_status.c_str(), "{\"status\":\"online\"}", true);
+      bool sent = client.publish(topic_status.c_str(), "{\"status\":\"online\"}", true);
+      Serial.printf("[MQTT] Online status publish %s\n", sent ? "OK" : "FAILED");
     } else {
+      Serial.printf("[MQTT] Connection failed, state=%d. Retry in 5 seconds.\n", client.state());
       delay(5000);
     }
   }
@@ -153,9 +174,14 @@ void reconnect() {
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
   String messageTemp;
   for (int i = 0; i < length; i++) messageTemp += (char)payload[i];
+  Serial.printf("[MQTT] Received: topic=%s, payload=%s\n", topic, messageTemp.c_str());
   
   StaticJsonDocument<256> doc;
-  if (deserializeJson(doc, messageTemp)) return;
+  DeserializationError error = deserializeJson(doc, messageTemp);
+  if (error) {
+    Serial.printf("[CMD] Invalid JSON: %s\n", error.c_str());
+    return;
+  }
 
   if (doc.containsKey("cmd") && doc.containsKey("state")) {
     String command = doc["cmd"].as<String>();
@@ -163,6 +189,8 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 
     if (command == "pump") digitalWrite(RELAY_PUMP, state);
     else if (command == "valve") digitalWrite(RELAY_VALVE, state);
+    else Serial.printf("[CMD] Unknown command: %s\n", command.c_str());
+    Serial.printf("[RELAY] Command=%s, requested=%d, pump GPIO=%d, valve GPIO=%d\n", command.c_str(), state, digitalRead(RELAY_PUMP), digitalRead(RELAY_VALVE));
 
     StaticJsonDocument<256> ackDoc;
     ackDoc["ack"] = command;          
@@ -172,6 +200,9 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     serializeJson(ackDoc, ackBuffer); 
     
     String topic_ack = base_topic + "ack";
-    client.publish(topic_ack.c_str(), ackBuffer);
+    bool sent = client.publish(topic_ack.c_str(), ackBuffer);
+    Serial.printf("[MQTT] ACK publish %s: %s\n", sent ? "OK" : "FAILED", ackBuffer);
+  } else {
+    Serial.println("[CMD] Ignored: missing cmd or state field.");
   }
 }
