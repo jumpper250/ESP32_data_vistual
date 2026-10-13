@@ -6,7 +6,7 @@ services:
     container_name: std-mosquitto
     restart: unless-stopped
     ports:
-      - "1883:1883"
+      - "11883:1883"
     volumes:
       - ./std_lab_data/mosquitto/config:/mosquitto/config
       - ./std_lab_data/mosquitto/data:/mosquitto/data
@@ -32,7 +32,7 @@ services:
     container_name: std-nodered
     restart: unless-stopped
     ports:
-      - "1880:1880"
+      - "11880:1880"
     volumes:
       - ./std_lab_data/nodered:/data
     networks:

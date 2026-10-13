@@ -22,7 +22,7 @@ LiquidCrystal_I2C lcd(0x27, 20, 4);
 // การตั้งค่า MQTT และ Topic
 // =========================================================
 const char* mqtt_server = "192.168.1.72"; // เปลี่ยนเป็น IP ของ MQTT Broker
-const int mqtt_port = 1883;
+const int mqtt_port = 11883; // Host port mapped to Mosquitto's container port 1883
 
 WiFiClient espClient;
 PubSubClient client(espClient);
