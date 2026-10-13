@@ -166,6 +166,7 @@
         "tls": "",
         "influxdbVersion": "2.0",
         "url": "http://std-influxdb:8086",
+        "timeout": "",
         "rejectUnauthorized": true
     },
     {
@@ -385,14 +386,14 @@
         "z": "0b979bca36088c0f",
         "influxdb": "local_influx",
         "name": "Save to InfluxDB",
-        "measurement": "",
+        "measurement": "sensor_data",
         "precision": "",
         "retentionPolicy": "",
         "database": "database",
         "precisionV18FluxV20": "ms",
         "retentionPolicyV18Flux": "",
-        "org": "lab",
-        "bucket": "smartfarm",
+        "org": "Server-stack",
+        "bucket": "datasetAi",
         "x": 850,
         "y": 320,
         "wires": []
