@@ -50,6 +50,28 @@ docker version
 | `docs/node-red-flow.json` | Flow ตัวอย่างสำหรับนักศึกษานำเข้า Node-RED |
 | `std_lab_data/nodered/flows.json` | Flow ที่ Node-RED บันทึกขณะใช้งาน |
 | `std_lab_data/` | ข้อมูลถาวรของบริการ ห้ามลบระหว่างทำ Lab |
+| `.gitignore` | กำหนดไฟล์และข้อมูลที่ Git ไม่ต้องติดตาม |
+
+### การตั้งค่า `.gitignore`
+
+ไฟล์ `.gitignore` ใช้ระบุไฟล์ที่ Git ควรละเว้น เพื่อไม่ให้ไฟล์ build, ไฟล์เฉพาะเครื่อง และข้อมูล runtime ถูกเพิ่มเข้า repository โดยไม่ตั้งใจ รายการที่ตั้งค่าไว้ในโปรเจกต์นี้มีดังนี้:
+
+| รูปแบบที่ละเว้น | คำอธิบาย |
+|---|---|
+| `.pio` | ไฟล์ build และผลลัพธ์จาก PlatformIO ซึ่งสร้างใหม่ได้ |
+| `.vscode/.browse.c_cpp.db*` | ฐานข้อมูลสำหรับค้นหาและเรียกดูโค้ด C/C++ ที่ VS Code สร้างขึ้น |
+| `.vscode/c_cpp_properties.json` | การตั้งค่า IntelliSense C/C++ ที่อาจแตกต่างกันในแต่ละเครื่อง |
+| `.vscode/launch.json` | การตั้งค่าเปิดโปรแกรม Debug ซึ่งอาจเฉพาะกับเครื่องหรือวิธี Debug ของผู้ใช้ |
+| `.vscode/ipch` | ไฟล์แคชของ IntelliSense ที่สร้างใหม่ได้ |
+| `/std_lab_data/mosquitto/data/`, `/std_lab_data/mosquitto/log/` | ข้อมูลและ log ที่ Mosquitto สร้างระหว่างทำงาน |
+| `/std_lab_data/influxdb/` | ฐานข้อมูล InfluxDB ที่เก็บข้อมูล runtime |
+| `/std_lab_data/grafana/` | ข้อมูลและการตั้งค่าที่ Grafana สร้างหรือเปลี่ยนระหว่างใช้งาน |
+| `/std_lab_data/nodered/.config.*` | ไฟล์ตั้งค่าภายในของ Node-RED |
+| `/std_lab_data/nodered/*.backup` | ไฟล์สำรองที่ Node-RED สร้างขึ้น |
+| `/std_lab_data/nodered/flows_cred.json` | ข้อมูล credentials ของ Node-RED ซึ่งอาจมีข้อมูลลับ |
+| `/std_lab_data/nodered/node_modules/` | แพ็กเกจ Node.js ที่ติดตั้งสำหรับ Node-RED และติดตั้งใหม่ได้ |
+
+เครื่องหมาย `/` นำหน้ารูปแบบข้อมูลใน `std_lab_data` หมายถึงให้จับคู่จากโฟลเดอร์หลักของ repository ส่วนรูปแบบ `.vscode/...` และ `.pio` ใช้กับรายการที่ระบุในโปรเจกต์นี้เท่านั้น ทั้งนี้ `.gitignore` มีผลกับไฟล์ที่ Git ยังไม่ได้ติดตาม หากไฟล์ถูกเพิ่มเข้า Git ไปแล้ว การเพิ่มชื่อไฟล์ใน `.gitignore` อย่างเดียวจะไม่หยุดติดตามไฟล์นั้น
 
 พอร์ตที่ใช้ในโปรเจกต์ปัจจุบัน:
 
