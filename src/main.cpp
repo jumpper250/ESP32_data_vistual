@@ -4,6 +4,11 @@
 #include <LiquidCrystal_I2C.h>
 #include <DHT.h>
 #include <ArduinoJson.h>
+#include "relay_command.h"
+#include <atomic>
+#include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
+#include <freertos/task.h>
 
 // =========================================================
 // การตั้งค่าฮาร์ดแวร์
@@ -36,9 +41,17 @@ unsigned long lastMsg = 0;
 const unsigned long MQTT_RETRY_INTERVAL_MS = 5000;
 unsigned long lastMqttAttempt = 0;
 bool mqttAttempted = false;
+// Only mqttTask accesses client/espClient. The UI never waits for DNS or sockets.
+struct TelemetryMessage {
+  char payload[256];
+};
+QueueHandle_t telemetryQueue = nullptr;
+std::atomic<bool> wifiPortalActive{false};
+bool wifiButtonHandled = false;
 
 void reconnect();
 void mqttCallback(char* topic, byte* payload, unsigned int length);
+void mqttTask(void* parameter);
 
 // =========================================================
 // ฟังก์ชัน 1: setup()
@@ -87,6 +100,13 @@ void setup() {
   espClient.setTimeout(1);
   client.setSocketTimeout(1);
   Serial.printf("[MQTT] Broker=%s:%d, client=%s\n", mqtt_server, mqtt_port, device_id.c_str());
+  telemetryQueue = xQueueCreate(1, sizeof(TelemetryMessage));
+  if (telemetryQueue == nullptr ||
+      xTaskCreate(mqttTask, "mqtt", 6144, nullptr, 1, nullptr) != pdPASS) {
+    Serial.println("[MQTT] Cannot start worker. Restarting.");
+    delay(1000);
+    ESP.restart();
+  }
 }
 
 // =========================================================
@@ -94,9 +114,12 @@ void setup() {
 // =========================================================
 void loop() {
   // รีเซ็ต WiFi เมื่อกดปุ่มค้าง
-  if (digitalRead(WIFI_RESET_BTN) == LOW) {
+  if (digitalRead(WIFI_RESET_BTN) == HIGH) wifiButtonHandled = false;
+  if (!wifiButtonHandled && digitalRead(WIFI_RESET_BTN) == LOW) {
     delay(50); 
     if (digitalRead(WIFI_RESET_BTN) == LOW) {
+      wifiButtonHandled = true;
+      wifiPortalActive.store(true);
       lcd.clear();
       lcd.print("WiFi Config Mode");
       WiFiManager wm;
@@ -108,12 +131,12 @@ void loop() {
       }
       Serial.printf("[WiFi] Portal complete. Status=%d, IP=%s\n", WiFi.status(), WiFi.localIP().toString().c_str());
       lcd.clear();
+      wifiPortalActive.store(false);
     }
   }
 
-  // รักษาสถานะเชื่อมต่อ MQTT
-  if (!client.connected()) reconnect();
-  if (client.connected()) client.loop();
+  // Network work runs in mqttTask; button, sensor and LCD stay in this loop.
+  delay(1);
 
   // ส่งข้อมูลทุก 5 วินาที
   unsigned long now = millis();
@@ -133,22 +156,44 @@ void loop() {
     lcd.setCursor(0, 1);
     lcd.print("H:" + String(h, 1) + "% V:" + String(digitalRead(RELAY_VALVE)));
 
-    StaticJsonDocument<256> doc;
+    JsonDocument doc;
     doc["temperature"] = t;
     doc["humidity"] = h;
     doc["pump_state"] = digitalRead(RELAY_PUMP);
     doc["valve_state"] = digitalRead(RELAY_VALVE);
     
-    char msgBuffer[256];
-    serializeJson(doc, msgBuffer);
+    TelemetryMessage message{};
+    serializeJson(doc, message.payload, sizeof(message.payload));
+    // Keep only the newest sample if a connection attempt is still waiting.
+    xQueueOverwrite(telemetryQueue, &message);
+  }
+}
 
-    String topic_telemetry = base_topic + "telemetry";
-    if (!client.connected()) {
-      Serial.println("[MQTT] Offline. Telemetry skipped; sensor/LCD still running.");
-      return;
+void mqttTask(void* parameter) {
+  for (;;) {
+    if (wifiPortalActive.load()) {
+      if (client.connected()) client.disconnect();
+      xQueueReset(telemetryQueue);
+      vTaskDelay(pdMS_TO_TICKS(20));
+      continue;
     }
-    bool sent = client.publish(topic_telemetry.c_str(), msgBuffer);
-    Serial.printf("[MQTT] Telemetry publish %s: topic=%s, payload=%s\n", sent ? "OK" : "FAILED", topic_telemetry.c_str(), msgBuffer);
+
+    if (!client.connected()) reconnect();
+    // A portal may have opened while DNS/TCP/MQTT connect was waiting.
+    if (wifiPortalActive.load()) continue;
+    if (client.connected()) client.loop();
+
+    TelemetryMessage message{};
+    if (xQueueReceive(telemetryQueue, &message, 0) == pdTRUE) {
+      if (client.connected() && !wifiPortalActive.load()) {
+        String topic = base_topic + "telemetry";
+        bool sent = client.publish(topic.c_str(), message.payload);
+        Serial.printf("[MQTT] Telemetry publish %s: %s\n", sent ? "OK" : "FAILED", message.payload);
+      } else {
+        Serial.println("[MQTT] Offline. Telemetry skipped; sensor/LCD still running.");
+      }
+    }
+    vTaskDelay(pdMS_TO_TICKS(10));
   }
 }
 
@@ -156,19 +201,24 @@ void loop() {
 // ฟังก์ชัน 3: reconnect()
 // =========================================================
 void reconnect() {
-  if (client.connected() || WiFi.status() != WL_CONNECTED) return;
+  if (wifiPortalActive.load() || client.connected() || WiFi.status() != WL_CONNECTED) return;
 
   unsigned long now = millis();
   if (mqttAttempted && now - lastMqttAttempt < MQTT_RETRY_INTERVAL_MS) return;
   mqttAttempted = true;
 
-  // One attempt only: always return to loop() so the WiFi button is serviced.
+  // DNS and socket waits affect only this worker, never the button loop.
   Serial.printf("[MQTT] Connecting to %s:%d; WiFi status=%d\n", mqtt_server, mqtt_port, WiFi.status());
   String topic_status = base_topic + "status";
   String willMessage = "{\"status\":\"offline\"}";
 
   // ตั้งค่า LWT
   if (client.connect(device_id.c_str(), NULL, NULL, topic_status.c_str(), 0, true, willMessage.c_str())) {
+    if (wifiPortalActive.load()) {
+      client.disconnect();
+      lastMqttAttempt = millis();
+      return;
+    }
     String topic_cmd = base_topic + "cmd";
     Serial.println("[MQTT] Connected.");
     bool subscribed = client.subscribe(topic_cmd.c_str());
@@ -188,37 +238,24 @@ void reconnect() {
 // ฟังก์ชัน 4: mqttCallback()
 // =========================================================
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
-  String messageTemp;
-  for (int i = 0; i < length; i++) messageTemp += (char)payload[i];
-  Serial.printf("[MQTT] Received: topic=%s, payload=%s\n", topic, messageTemp.c_str());
-  
-  StaticJsonDocument<256> doc;
-  DeserializationError error = deserializeJson(doc, messageTemp);
-  if (error) {
-    Serial.printf("[CMD] Invalid JSON: %s\n", error.c_str());
+  if (wifiPortalActive.load() || String(topic) != base_topic + "cmd") return;
+  RelayCommand request{};
+  if (!parseRelayCommand(payload, length, request)) {
+    Serial.println("[CMD] Rejected: expected valid JSON with pump/valve and integer state 0/1.");
     return;
   }
+  if (wifiPortalActive.load()) return;
+  const char* command = request.target == RelayTarget::Pump ? "pump" : "valve";
+  int pin = request.target == RelayTarget::Pump ? RELAY_PUMP : RELAY_VALVE;
+  digitalWrite(pin, request.state);
+  Serial.printf("[RELAY] Command=%s, requested=%d, pump GPIO=%d, valve GPIO=%d\n", command, request.state, digitalRead(RELAY_PUMP), digitalRead(RELAY_VALVE));
 
-  if (doc.containsKey("cmd") && doc.containsKey("state")) {
-    String command = doc["cmd"].as<String>();
-    int state = doc["state"].as<int>();
-
-    if (command == "pump") digitalWrite(RELAY_PUMP, state);
-    else if (command == "valve") digitalWrite(RELAY_VALVE, state);
-    else Serial.printf("[CMD] Unknown command: %s\n", command.c_str());
-    Serial.printf("[RELAY] Command=%s, requested=%d, pump GPIO=%d, valve GPIO=%d\n", command.c_str(), state, digitalRead(RELAY_PUMP), digitalRead(RELAY_VALVE));
-
-    StaticJsonDocument<256> ackDoc;
-    ackDoc["ack"] = command;          
-    ackDoc["state_set"] = state;      
-    
-    char ackBuffer[256];
-    serializeJson(ackDoc, ackBuffer); 
-    
-    String topic_ack = base_topic + "ack";
-    bool sent = client.publish(topic_ack.c_str(), ackBuffer);
-    Serial.printf("[MQTT] ACK publish %s: %s\n", sent ? "OK" : "FAILED", ackBuffer);
-  } else {
-    Serial.println("[CMD] Ignored: missing cmd or state field.");
-  }
+  JsonDocument ackDoc;
+  ackDoc["ack"] = command;
+  ackDoc["state_set"] = digitalRead(pin);
+  char ackBuffer[256];
+  serializeJson(ackDoc, ackBuffer);
+  String topic_ack = base_topic + "ack";
+  bool sent = client.publish(topic_ack.c_str(), ackBuffer);
+  Serial.printf("[MQTT] ACK publish %s: %s\n", sent ? "OK" : "FAILED", ackBuffer);
 }

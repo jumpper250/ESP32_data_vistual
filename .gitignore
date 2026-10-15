@@ -15,3 +15,4 @@
 /std_lab_data/nodered/*.backup
 /std_lab_data/nodered/flows_cred.json
 /std_lab_data/nodered/node_modules/
+/std_lab_data/nodered/.npm/
