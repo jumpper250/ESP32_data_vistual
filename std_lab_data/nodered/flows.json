@@ -178,6 +178,8 @@
         "qos": "0",
         "datatype": "json",
         "broker": "local_mqtt",
+        "nl": false,
+        "rap": false,
         "inputs": 0,
         "x": 230,
         "y": 380,
