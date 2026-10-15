@@ -11,7 +11,7 @@
         "id": "local_mqtt",
         "type": "mqtt-broker",
         "name": "Mosquitto Broker",
-        "broker": "std-mosquitto",
+        "broker": "crop-io.com",
         "port": "1883",
         "clientid": "",
         "autoConnect": true,
@@ -168,27 +168,6 @@
         "url": "http://std-influxdb:8086",
         "timeout": "",
         "rejectUnauthorized": true
-    },
-    {
-        "id": "mqtt_in",
-        "type": "mqtt in",
-        "z": "0b979bca36088c0f",
-        "name": "",
-        "topic": "smart_farm/site_01/zone_A/node_01/#",
-        "qos": "0",
-        "datatype": "json",
-        "broker": "local_mqtt",
-        "nl": false,
-        "rap": false,
-        "inputs": 0,
-        "x": 230,
-        "y": 380,
-        "wires": [
-            [
-                "router_func",
-                "d82d95c6c53596ce"
-            ]
-        ]
     },
     {
         "id": "router_func",
@@ -412,8 +391,8 @@
         "complete": "false",
         "statusVal": "",
         "statusType": "auto",
-        "x": 520,
-        "y": 200,
+        "x": 540,
+        "y": 280,
         "wires": []
     },
     {
@@ -431,5 +410,26 @@
         "x": 560,
         "y": 680,
         "wires": []
+    },
+    {
+        "id": "7fa3c56b8c4e96e2",
+        "type": "mqtt in",
+        "z": "0b979bca36088c0f",
+        "name": "",
+        "topic": "smart_farm/site_01/zone_A/node_01/#",
+        "qos": "2",
+        "datatype": "json",
+        "broker": "local_mqtt",
+        "nl": false,
+        "rap": false,
+        "inputs": 0,
+        "x": 250,
+        "y": 360,
+        "wires": [
+            [
+                "router_func",
+                "d82d95c6c53596ce"
+            ]
+        ]
     }
 ]

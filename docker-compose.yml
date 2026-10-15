@@ -1,5 +1,4 @@
 
-version: '3.8'
 services:
   std-mosquitto:
     image: eclipse-mosquitto:latest
@@ -47,7 +46,7 @@ services:
     container_name: std-grafana
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "13000:3000"
     volumes:
       - ./std_lab_data/grafana:/var/lib/grafana
     networks:

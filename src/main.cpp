@@ -21,8 +21,8 @@ LiquidCrystal_I2C lcd(0x27, 20, 4);
 // =========================================================
 // การตั้งค่า MQTT และ Topic
 // =========================================================
-const char* mqtt_server = "192.168.1.72"; // เปลี่ยนเป็น IP ของ MQTT Broker
-const int mqtt_port = 11883; // Host port mapped to Mosquitto's container port 1883
+const char* mqtt_server = "crop-io.com"; // เปลี่ยนเป็น IP ของ MQTT Broker
+const int mqtt_port = 1883; // Host port mapped to Mosquitto's container port 1883
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -33,6 +33,9 @@ String device_id = "node_01"; // ต้องไม่ซ้ำกัน
 String base_topic = "smart_farm/" + site_id + "/" + zone_id + "/" + device_id + "/";
 
 unsigned long lastMsg = 0; 
+const unsigned long MQTT_RETRY_INTERVAL_MS = 5000;
+unsigned long lastMqttAttempt = 0;
+bool mqttAttempted = false;
 
 void reconnect();
 void mqttCallback(char* topic, byte* payload, unsigned int length);
@@ -80,6 +83,9 @@ void setup() {
 
   client.setServer(mqtt_server, mqtt_port);
   client.setCallback(mqttCallback);
+  // WiFiClient in this ESP32 core uses seconds here (including TCP connect).
+  espClient.setTimeout(1);
+  client.setSocketTimeout(1);
   Serial.printf("[MQTT] Broker=%s:%d, client=%s\n", mqtt_server, mqtt_port, device_id.c_str());
 }
 
@@ -107,7 +113,7 @@ void loop() {
 
   // รักษาสถานะเชื่อมต่อ MQTT
   if (!client.connected()) reconnect();
-  client.loop(); 
+  if (client.connected()) client.loop();
 
   // ส่งข้อมูลทุก 5 วินาที
   unsigned long now = millis();
@@ -137,6 +143,10 @@ void loop() {
     serializeJson(doc, msgBuffer);
 
     String topic_telemetry = base_topic + "telemetry";
+    if (!client.connected()) {
+      Serial.println("[MQTT] Offline. Telemetry skipped; sensor/LCD still running.");
+      return;
+    }
     bool sent = client.publish(topic_telemetry.c_str(), msgBuffer);
     Serial.printf("[MQTT] Telemetry publish %s: topic=%s, payload=%s\n", sent ? "OK" : "FAILED", topic_telemetry.c_str(), msgBuffer);
   }
@@ -146,26 +156,32 @@ void loop() {
 // ฟังก์ชัน 3: reconnect()
 // =========================================================
 void reconnect() {
-  while (!client.connected()) {
-    Serial.printf("[MQTT] Connecting to %s:%d; WiFi status=%d\n", mqtt_server, mqtt_port, WiFi.status());
-    String topic_status = base_topic + "status";
-    String willMessage = "{\"status\":\"offline\"}"; 
-    
-    // ตั้งค่า LWT 
-    if (client.connect(device_id.c_str(), NULL, NULL, topic_status.c_str(), 0, true, willMessage.c_str())) {
-      String topic_cmd = base_topic + "cmd";
-      Serial.println("[MQTT] Connected.");
-      bool subscribed = client.subscribe(topic_cmd.c_str());
-      Serial.printf("[MQTT] Subscribe %s: %s\n", subscribed ? "OK" : "FAILED", topic_cmd.c_str());
-      
-      // ทับ LWT ด้วยสถานะ online
-      bool sent = client.publish(topic_status.c_str(), "{\"status\":\"online\"}", true);
-      Serial.printf("[MQTT] Online status publish %s\n", sent ? "OK" : "FAILED");
-    } else {
-      Serial.printf("[MQTT] Connection failed, state=%d. Retry in 5 seconds.\n", client.state());
-      delay(5000);
-    }
+  if (client.connected() || WiFi.status() != WL_CONNECTED) return;
+
+  unsigned long now = millis();
+  if (mqttAttempted && now - lastMqttAttempt < MQTT_RETRY_INTERVAL_MS) return;
+  mqttAttempted = true;
+
+  // One attempt only: always return to loop() so the WiFi button is serviced.
+  Serial.printf("[MQTT] Connecting to %s:%d; WiFi status=%d\n", mqtt_server, mqtt_port, WiFi.status());
+  String topic_status = base_topic + "status";
+  String willMessage = "{\"status\":\"offline\"}";
+
+  // ตั้งค่า LWT
+  if (client.connect(device_id.c_str(), NULL, NULL, topic_status.c_str(), 0, true, willMessage.c_str())) {
+    String topic_cmd = base_topic + "cmd";
+    Serial.println("[MQTT] Connected.");
+    bool subscribed = client.subscribe(topic_cmd.c_str());
+    Serial.printf("[MQTT] Subscribe %s: %s\n", subscribed ? "OK" : "FAILED", topic_cmd.c_str());
+
+    // ทับ LWT ด้วยสถานะ online
+    bool sent = client.publish(topic_status.c_str(), "{\"status\":\"online\"}", true);
+    Serial.printf("[MQTT] Online status publish %s\n", sent ? "OK" : "FAILED");
+  } else {
+    Serial.printf("[MQTT] Connection failed, state=%d. Retry in 5 seconds.\n", client.state());
   }
+  // Wait five seconds after this attempt without blocking the main loop.
+  lastMqttAttempt = millis();
 }
 
 // =========================================================
