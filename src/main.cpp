@@ -21,7 +21,7 @@ LiquidCrystal_I2C lcd(0x27, 20, 4);
 // =========================================================
 // การตั้งค่า MQTT และ Topic
 // =========================================================
-const char* mqtt_server = "192.168.1.72"; // เปลี่ยนเป็น IP ของ MQTT Broker
+const char* mqtt_server = "192.168.1.215"; // เปลี่ยนเป็น IP ของ MQTT Broker
 const int mqtt_port = 11883; // Host port mapped to Mosquitto's container port 1883
 
 WiFiClient espClient;
@@ -63,8 +63,8 @@ void setup() {
   lcd.setCursor(0, 1);
   lcd.print("Connecting WiFi...");
   
-  Serial.println("[WiFi] Connecting; setup AP: SmartFarm_Setup");
-  if (!wm.autoConnect("SmartFarm_Setup")) {
+  Serial.println("[WiFi] Connecting; setup AP: parinya_AP");
+  if (!wm.autoConnect("parinya_AP")) {
     Serial.println("[WiFi] Connection failed. Restarting in 3 seconds.");
     delay(3000);
     ESP.restart(); 
@@ -95,8 +95,8 @@ void loop() {
       lcd.print("WiFi Config Mode");
       WiFiManager wm;
       wm.setConfigPortalTimeout(180); 
-      Serial.println("[WiFi] Button pressed. Opening SmartFarm_Setup portal (180 seconds).");
-      if (!wm.startConfigPortal("SmartFarm_Setup")) {
+      Serial.println("[WiFi] Button pressed. Opening parinya_AP portal (180 seconds).");
+      if (!wm.startConfigPortal("parinya_AP")) {
         Serial.println("[WiFi] Portal failed or timed out. Restarting.");
         ESP.restart();
       }
