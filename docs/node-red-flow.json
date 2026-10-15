@@ -33,8 +33,8 @@
         "type":  "function",
         "z":  "0b979bca36088c0f",
         "name":  "Router \u0026 Influx Format",
-        "func":  "if (!msg.payload || typeof msg.payload !== \u0027object\u0027) return [null, null, null]; \n\nlet parts = msg.topic.split(\"/\");\nlet site = parts[1];  \nlet zone = parts[2];  \nlet device = parts[3];\nlet msg_type = parts[4]; \n\nif (msg_type === \"telemetry\") {\n    let msgInflux = {\n        measurement: \"sensor_data\",\n        payload: [\n            {\n                temperature: parseFloat(msg.payload.temperature),\n                humidity: parseFloat(msg.payload.humidity),\n                pump: parseInt(msg.payload.pump_state || 0),\n                valve: parseInt(msg.payload.valve_state || 0)\n            },\n            { site: site, zone: zone, device: device }\n        ]\n    };\n    let msgDashboard = { payload: msg.payload };\n    return [msgInflux, msgDashboard, null];\n} \nelse if (msg_type === \"status\") {\n    return [null, null, { payload: msg.payload.status }];\n}\nreturn [null, null, null];",
-        "outputs":  3,
+        "func": "function switchFeedback(command, state) {\n    if (state !== 0 && state !== 1) return null;\n    return { payload: { cmd: command, state: state } };\n}\n\nif (!msg.payload || typeof msg.payload !== \u0027object\u0027) return [null, null, null, null, null];\n\nlet parts = msg.topic.split(\"/\");\nlet site = parts[1];\nlet zone = parts[2];\nlet device = parts[3];\nlet msg_type = parts[4];\n\nif (msg_type === \"telemetry\") {\n    let msgInflux = {\n        measurement: \"sensor_data\",\n        payload: [\n            {\n                temperature: parseFloat(msg.payload.temperature),\n                humidity: parseFloat(msg.payload.humidity),\n                pump: parseInt(msg.payload.pump_state || 0),\n                valve: parseInt(msg.payload.valve_state || 0)\n            },\n            { site: site, zone: zone, device: device }\n        ]\n    };\n    let msgDashboard = { payload: msg.payload };\n    return [msgInflux, msgDashboard, null,\n        switchFeedback(\"pump\", msg.payload.pump_state),\n        switchFeedback(\"valve\", msg.payload.valve_state)];\n}\nif (msg_type === \"status\") {\n    return [null, null, { payload: msg.payload.status }, null, null];\n}\nif (msg_type === \"ack\") {\n    if (msg.payload.ack === \"pump\") {\n        return [null, null, null, switchFeedback(\"pump\", msg.payload.state_set), null];\n    }\n    if (msg.payload.ack === \"valve\") {\n        return [null, null, null, null, switchFeedback(\"valve\", msg.payload.state_set)];\n    }\n}\nreturn [null, null, null, null, null];",
+        "outputs": 5,
         "timeout":  "",
         "noerr":  0,
         "initialize":  "",
@@ -54,6 +54,12 @@
                       ],
                       [
                           "text_status"
+                      ],
+                      [
+                          "switch_pump"
+                      ],
+                      [
+                          "switch_valve"
                       ]
                   ]
     },
@@ -88,8 +94,8 @@
         "order":  4,
         "width":  0,
         "height":  0,
-        "passthru":  true,
-        "decouple":  "false",
+        "passthru": false,
+        "decouple": "true",
         "topic":  "smart_farm/site_01/zone_A/node_01/cmd",
         "topicType":  "str",
         "style":  "",
@@ -123,8 +129,8 @@
         "order":  5,
         "width":  0,
         "height":  0,
-        "passthru":  true,
-        "decouple":  "false",
+        "passthru": false,
+        "decouple": "true",
         "topic":  "smart_farm/site_01/zone_A/node_01/cmd",
         "topicType":  "str",
         "style":  "",

@@ -8,7 +8,9 @@ The portal retains its existing 180-second timeout and restart behavior.
 
 Relay commands must contain `cmd` equal to `pump` or `valve` and integer
 `state` equal to `0` or `1`. Invalid requests do not change GPIOs or produce
-a success ACK. Valid ACKs report the GPIO level after the write.
+a success ACK. Valid ACKs report the GPIO level after the write. The Node-RED
+dashboard updates each relay switch from its ACK and periodic telemetry;
+feedback messages update the UI only and are not republished as commands.
 
 ## Automated checks
 
