@@ -1,10 +1,19 @@
 # Firmware and flow checks
 
-MQTT/DNS runs in a dedicated FreeRTOS task. Only that task accesses the
-PubSubClient and WiFiClient after setup. The main loop reads the WiFi button,
-sensor and LCD, and sends the newest telemetry through a one-item queue.
-An atomic flag pauses MQTT processing while the WiFi setup portal is open.
-The portal retains its existing 180-second timeout and restart behavior.
+The firmware uses one Arduino `loop()`: check the WiFi button, try MQTT if
+needed, process incoming commands, then read/update/publish sensor data when
+due. There are no application-created tasks, queues or atomic flags.
+`reconnect()` attempts a connection once and uses `millis()` to wait five
+seconds after that attempt before trying again. It has no retry `while` or
+five-second `delay`, so the loop keeps checking the button between attempts.
+
+TCP connect and MQTT response timeouts are each set to one second in the
+installed ESP32 core and PubSubClient. Connection calls are still synchronous:
+DNS can take longer, and a short button press during a network wait can be
+missed. An IP address for `mqtt_server` avoids DNS lookup. Sensor timing is
+approximate and can be delayed by these waits. Offline samples are skipped.
+The blocking WiFi portal disconnects MQTT and pauses sensor updates until it
+closes; it retains its 180-second timeout and restart behavior.
 
 Relay commands must contain `cmd` equal to `pump` or `valve` and integer
 `state` equal to `0` or `1`. Invalid requests do not change GPIOs or produce
@@ -24,8 +33,10 @@ feedback messages update the UI only and are not republished as commands.
 ## Hardware checks after uploading
 
 1. Start with the broker unavailable. Press and hold GPIO 4's button:
-   `WiFi Config Mode` and the `parinya_AP` portal should appear while MQTT
-   retries continue independently. Repeat with DNS unavailable.
+   `WiFi Config Mode` and the `parinya_AP` portal should appear after any
+   in-progress connection wait ends. MQTT retries stop while the portal is
+   open. Repeat with DNS unavailable and record the longer response delay;
+   do not expect a short press during a network wait to be detected.
 2. Release the button. Configure WiFi and check that the portal closes,
    MQTT reconnects, subscriptions resume, and telemetry reaches Node-RED.
 3. Confirm holding the button through portal completion does not reopen it
@@ -33,5 +44,9 @@ feedback messages update the UI only and are not republished as commands.
 4. With test loads disconnected, verify valid pump/valve commands and ACKs;
    invalid command names, missing fields, string/boolean states and values
    outside 0/1 must not change outputs or return a success ACK.
+5. Leave the broker offline without opening the portal. Check that sensor/LCD
+   updates continue between attempts, and connection logs show a five-second
+   gap after each failed attempt. Restore the broker and verify commands,
+   ACKs and telemetry resume. Repeat using a broker IP to exclude DNS waits.
 
 Automated tests do not substitute for these board and wiring checks.

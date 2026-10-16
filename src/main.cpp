@@ -5,10 +5,6 @@
 #include <DHT.h>
 #include <ArduinoJson.h>
 #include "relay_command.h"
-#include <atomic>
-#include <freertos/FreeRTOS.h>
-#include <freertos/queue.h>
-#include <freertos/task.h>
 
 // =========================================================
 // การตั้งค่าฮาร์ดแวร์
@@ -41,17 +37,11 @@ unsigned long lastMsg = 0;
 const unsigned long MQTT_RETRY_INTERVAL_MS = 5000;
 unsigned long lastMqttAttempt = 0;
 bool mqttAttempted = false;
-// Only mqttTask accesses client/espClient. The UI never waits for DNS or sockets.
-struct TelemetryMessage {
-  char payload[256];
-};
-QueueHandle_t telemetryQueue = nullptr;
-std::atomic<bool> wifiPortalActive{false};
+// จำว่ากดปุ่มแล้ว เพื่อไม่เปิดหน้าตั้งค่าซ้ำหากยังกดค้างอยู่
 bool wifiButtonHandled = false;
 
 void reconnect();
 void mqttCallback(char* topic, byte* payload, unsigned int length);
-void mqttTask(void* parameter);
 
 // =========================================================
 // ฟังก์ชัน 1: setup()
@@ -96,30 +86,25 @@ void setup() {
 
   client.setServer(mqtt_server, mqtt_port);
   client.setCallback(mqttCallback);
-  // WiFiClient in this ESP32 core uses seconds here (including TCP connect).
+  // ลดเวลารอ TCP และ MQTT เป็นอย่างละ 1 วินาที (ไม่รวมเวลารอ DNS)
+  // WiFiClient ใน ESP32 core ที่ใช้อยู่นี้รับ setTimeout เป็นวินาที
   espClient.setTimeout(1);
   client.setSocketTimeout(1);
   Serial.printf("[MQTT] Broker=%s:%d, client=%s\n", mqtt_server, mqtt_port, device_id.c_str());
-  telemetryQueue = xQueueCreate(1, sizeof(TelemetryMessage));
-  if (telemetryQueue == nullptr ||
-      xTaskCreate(mqttTask, "mqtt", 6144, nullptr, 1, nullptr) != pdPASS) {
-    Serial.println("[MQTT] Cannot start worker. Restarting.");
-    delay(1000);
-    ESP.restart();
-  }
 }
 
 // =========================================================
 // ฟังก์ชัน 2: loop()
 // =========================================================
 void loop() {
-  // รีเซ็ต WiFi เมื่อกดปุ่มค้าง
+  // ตรวจปุ่มก่อนลองเชื่อมต่อ MQTT ทุกครั้ง
   if (digitalRead(WIFI_RESET_BTN) == HIGH) wifiButtonHandled = false;
   if (!wifiButtonHandled && digitalRead(WIFI_RESET_BTN) == LOW) {
     delay(50); 
     if (digitalRead(WIFI_RESET_BTN) == LOW) {
       wifiButtonHandled = true;
-      wifiPortalActive.store(true);
+      // หน้าตั้งค่า WiFi ทำงานใน loop เดียวกัน จึงพัก MQTT ไว้ก่อน
+      if (client.connected()) client.disconnect();
       lcd.clear();
       lcd.print("WiFi Config Mode");
       WiFiManager wm;
@@ -131,12 +116,12 @@ void loop() {
       }
       Serial.printf("[WiFi] Portal complete. Status=%d, IP=%s\n", WiFi.status(), WiFi.localIP().toString().c_str());
       lcd.clear();
-      wifiPortalActive.store(false);
     }
   }
 
-  // Network work runs in mqttTask; button, sensor and LCD stay in this loop.
-  delay(1);
+  // ลองเชื่อมต่อครั้งเดียวแล้วกลับมาทำงานต่อ ไม่วนรอจนกว่าจะเชื่อมต่อได้
+  if (!client.connected()) reconnect();
+  if (client.connected()) client.loop();
 
   // ส่งข้อมูลทุก 5 วินาที
   unsigned long now = millis();
@@ -162,38 +147,15 @@ void loop() {
     doc["pump_state"] = digitalRead(RELAY_PUMP);
     doc["valve_state"] = digitalRead(RELAY_VALVE);
     
-    TelemetryMessage message{};
-    serializeJson(doc, message.payload, sizeof(message.payload));
-    // Keep only the newest sample if a connection attempt is still waiting.
-    xQueueOverwrite(telemetryQueue, &message);
-  }
-}
-
-void mqttTask(void* parameter) {
-  for (;;) {
-    if (wifiPortalActive.load()) {
-      if (client.connected()) client.disconnect();
-      xQueueReset(telemetryQueue);
-      vTaskDelay(pdMS_TO_TICKS(20));
-      continue;
+    char msgBuffer[256];
+    serializeJson(doc, msgBuffer, sizeof(msgBuffer));
+    if (client.connected()) {
+      String topic = base_topic + "telemetry";
+      bool sent = client.publish(topic.c_str(), msgBuffer);
+      Serial.printf("[MQTT] Telemetry publish %s: %s\n", sent ? "OK" : "FAILED", msgBuffer);
+    } else {
+      Serial.println("[MQTT] Offline. Telemetry skipped; sensor/LCD still running.");
     }
-
-    if (!client.connected()) reconnect();
-    // A portal may have opened while DNS/TCP/MQTT connect was waiting.
-    if (wifiPortalActive.load()) continue;
-    if (client.connected()) client.loop();
-
-    TelemetryMessage message{};
-    if (xQueueReceive(telemetryQueue, &message, 0) == pdTRUE) {
-      if (client.connected() && !wifiPortalActive.load()) {
-        String topic = base_topic + "telemetry";
-        bool sent = client.publish(topic.c_str(), message.payload);
-        Serial.printf("[MQTT] Telemetry publish %s: %s\n", sent ? "OK" : "FAILED", message.payload);
-      } else {
-        Serial.println("[MQTT] Offline. Telemetry skipped; sensor/LCD still running.");
-      }
-    }
-    vTaskDelay(pdMS_TO_TICKS(10));
   }
 }
 
@@ -201,24 +163,20 @@ void mqttTask(void* parameter) {
 // ฟังก์ชัน 3: reconnect()
 // =========================================================
 void reconnect() {
-  if (wifiPortalActive.load() || client.connected() || WiFi.status() != WL_CONNECTED) return;
+  if (client.connected() || WiFi.status() != WL_CONNECTED) return;
 
   unsigned long now = millis();
+  // ใช้ millis() แทน delay(5000) ระหว่างรอรอบถัดไป loop ยังตรวจปุ่มได้
   if (mqttAttempted && now - lastMqttAttempt < MQTT_RETRY_INTERVAL_MS) return;
   mqttAttempted = true;
 
-  // DNS and socket waits affect only this worker, never the button loop.
+  // connect() ยังรอเครือข่ายได้ชั่วคราว แต่จะลองเพียงครั้งเดียวต่อรอบ
   Serial.printf("[MQTT] Connecting to %s:%d; WiFi status=%d\n", mqtt_server, mqtt_port, WiFi.status());
   String topic_status = base_topic + "status";
   String willMessage = "{\"status\":\"offline\"}";
 
   // ตั้งค่า LWT
   if (client.connect(device_id.c_str(), NULL, NULL, topic_status.c_str(), 0, true, willMessage.c_str())) {
-    if (wifiPortalActive.load()) {
-      client.disconnect();
-      lastMqttAttempt = millis();
-      return;
-    }
     String topic_cmd = base_topic + "cmd";
     Serial.println("[MQTT] Connected.");
     bool subscribed = client.subscribe(topic_cmd.c_str());
@@ -230,7 +188,7 @@ void reconnect() {
   } else {
     Serial.printf("[MQTT] Connection failed, state=%d. Retry in 5 seconds.\n", client.state());
   }
-  // Wait five seconds after this attempt without blocking the main loop.
+  // เริ่มนับช่วงพัก 5 วินาทีหลังจบการเชื่อมต่อครั้งนี้
   lastMqttAttempt = millis();
 }
 
@@ -238,13 +196,12 @@ void reconnect() {
 // ฟังก์ชัน 4: mqttCallback()
 // =========================================================
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
-  if (wifiPortalActive.load() || String(topic) != base_topic + "cmd") return;
+  if (String(topic) != base_topic + "cmd") return;
   RelayCommand request{};
   if (!parseRelayCommand(payload, length, request)) {
     Serial.println("[CMD] Rejected: expected valid JSON with pump/valve and integer state 0/1.");
     return;
   }
-  if (wifiPortalActive.load()) return;
   const char* command = request.target == RelayTarget::Pump ? "pump" : "valve";
   int pin = request.target == RelayTarget::Pump ? RELAY_PUMP : RELAY_VALVE;
   digitalWrite(pin, request.state);
