@@ -381,8 +381,8 @@
         "retentionPolicyV18Flux": "",
         "org": "Server-stack",
         "bucket": "datasetAi",
-        "x": 850,
-        "y": 320,
+        "x": 870,
+        "y": 300,
         "wires": []
     },
     {
