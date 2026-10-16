@@ -69,6 +69,16 @@ void setup() {
   lcd.print("Connecting WiFi...");
   
   Serial.println("[WiFi] Connecting; setup AP: parinya_AP");
+  // --- เพิ่มโค้ดบังคับต่อ Wokwi-GUEST ตรงนี้ ---
+  Serial.println("[Wokwi] Bypassing Portal: Connecting to Wokwi-GUEST...");
+  WiFi.begin("Wokwi-GUEST", "", 6);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(250);
+    Serial.print(".");
+  }
+  Serial.println("\n[Wokwi] Connected to Wokwi-GUEST!");
+  // ----------------------------------------
+  
   if (!wm.autoConnect("parinya_AP")) {
     Serial.println("[WiFi] Connection failed. Restarting in 3 seconds.");
     delay(3000);
