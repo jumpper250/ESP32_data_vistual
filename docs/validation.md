@@ -15,8 +15,9 @@ approximate and can be delayed by these waits. Offline samples are skipped.
 The blocking WiFi portal disconnects MQTT and pauses sensor updates until it
 closes; it retains its 180-second timeout and restart behavior.
 
-Relay commands must contain `cmd` equal to `pump` or `valve` and integer
-`state` equal to `0` or `1`. Invalid requests do not change GPIOs or produce
+Relay commands are validated directly in `mqttCallback()` in `src/main.cpp`,
+before any GPIO write or ACK. They must contain `cmd` equal to `pump` or
+`valve` and integer `state` equal to `0` or `1`. Invalid requests do not change GPIOs or produce
 a success ACK. Valid ACKs report the GPIO level after the write. The Node-RED
 dashboard updates each relay switch from its ACK and periodic telemetry;
 feedback messages update the UI only and are not republished as commands.
@@ -25,10 +26,9 @@ feedback messages update the UI only and are not republished as commands.
 
 - `platformio run` builds the ESP32 firmware.
 - `node --test test/flows.test.cjs` checks flow IDs, references and routing.
-- Build/run `test/relay_command_test.cpp` with a native C++17 compiler,
-  adding `include` and `.pio/libdeps/esp32doit-devkit-v1/ArduinoJson/src`
-  to the include path. This tests the same parser used by the firmware,
-  without driving physical relays or publishing MQTT messages.
+
+Command validation is now part of the Arduino callback and has no standalone
+native parser test. Verify its behavior using the hardware checks below.
 
 ## Hardware checks after uploading
 
@@ -42,8 +42,9 @@ feedback messages update the UI only and are not republished as commands.
 3. Confirm holding the button through portal completion does not reopen it
    until it has been released and pressed again.
 4. With test loads disconnected, verify valid pump/valve commands and ACKs;
-   invalid command names, missing fields, string/boolean states and values
-   outside 0/1 must not change outputs or return a success ACK.
+   empty payloads, payloads over 256 bytes, malformed JSON, invalid command
+   names, missing fields, string/boolean/fractional states and values outside
+   0/1 must not change outputs or return a success ACK.
 5. Leave the broker offline without opening the portal. Check that sensor/LCD
    updates continue between attempts, and connection logs show a five-second
    gap after each failed attempt. Restore the broker and verify commands,

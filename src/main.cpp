@@ -4,7 +4,6 @@
 #include <LiquidCrystal_I2C.h>
 #include <DHT.h>
 #include <ArduinoJson.h>
-#include "relay_command.h"
 
 // =========================================================
 // การตั้งค่าฮาร์ดแวร์
@@ -197,15 +196,42 @@ void reconnect() {
 // =========================================================
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
   if (String(topic) != base_topic + "cmd") return;
-  RelayCommand request{};
-  if (!parseRelayCommand(payload, length, request)) {
-    Serial.println("[CMD] Rejected: expected valid JSON with pump/valve and integer state 0/1.");
+
+  // ตรวจขนาดและอ่าน JSON ตามความยาวที่ MQTT ส่งมา
+  if (length == 0 || length > 256) {
+    Serial.println("[CMD] Rejected: payload must contain 1-256 bytes.");
     return;
   }
-  const char* command = request.target == RelayTarget::Pump ? "pump" : "valve";
-  int pin = request.target == RelayTarget::Pump ? RELAY_PUMP : RELAY_VALVE;
-  digitalWrite(pin, request.state);
-  Serial.printf("[RELAY] Command=%s, requested=%d, pump GPIO=%d, valve GPIO=%d\n", command, request.state, digitalRead(RELAY_PUMP), digitalRead(RELAY_VALVE));
+  JsonDocument doc;
+  if (deserializeJson(doc, payload, length)) {
+    Serial.println("[CMD] Rejected: invalid JSON.");
+    return;
+  }
+
+  // ต้องมีชื่อคำสั่งเป็นข้อความ และ state เป็นจำนวนเต็ม 0 หรือ 1
+  if (!doc["cmd"].is<const char*>() || !doc["state"].is<int>()) {
+    Serial.println("[CMD] Rejected: cmd must be text and state must be an integer.");
+    return;
+  }
+  String command = doc["cmd"].as<const char*>();
+  int state = doc["state"].as<int>();
+  if (state != 0 && state != 1) {
+    Serial.println("[CMD] Rejected: state must be 0 or 1.");
+    return;
+  }
+
+  // เลือกขารีเลย์ และเปลี่ยน GPIO หลังจากตรวจคำสั่งครบแล้วเท่านั้น
+  int pin;
+  if (command == "pump") {
+    pin = RELAY_PUMP;
+  } else if (command == "valve") {
+    pin = RELAY_VALVE;
+  } else {
+    Serial.println("[CMD] Rejected: cmd must be pump or valve.");
+    return;
+  }
+  digitalWrite(pin, state);
+  Serial.printf("[RELAY] Command=%s, requested=%d, pump GPIO=%d, valve GPIO=%d\n", command.c_str(), state, digitalRead(RELAY_PUMP), digitalRead(RELAY_VALVE));
 
   JsonDocument ackDoc;
   ackDoc["ack"] = command;
