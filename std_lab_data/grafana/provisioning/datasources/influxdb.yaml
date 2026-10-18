@@ -1,0 +1,14 @@
+apiVersion: 1
+datasources:
+  - name: InfluxDB
+    type: influxdb
+    uid: smartfarm-influx
+    access: proxy
+    url: http://std-influxdb:8086
+    isDefault: true
+    jsonData:
+      version: Flux
+      organization: Server-stack
+      defaultBucket: datasetAi
+    secureJsonData:
+      token: $INFLUXDB_READ_TOKEN

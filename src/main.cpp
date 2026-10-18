@@ -21,8 +21,8 @@ LiquidCrystal_I2C lcd(0x27, 20, 4);
 // =========================================================
 // การตั้งค่า MQTT และ Topic
 // =========================================================
-const char* mqtt_server = "crop-io.com"; // เปลี่ยนเป็น IP ของ MQTT Broker
-const int mqtt_port = 1883; // Host port mapped to Mosquitto's container port 1883
+const char* mqtt_server = "172.18.148.216"; // เปลี่ยนเป็น IP ของ MQTT Broker
+const int mqtt_port = 11883; // Host port mapped to Mosquitto's container port 1883
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -30,7 +30,7 @@ PubSubClient client(espClient);
 String site_id = "site_01";
 String zone_id = "zone_A";
 String device_id = "node_01"; // ต้องไม่ซ้ำกัน
-String base_topic = "smart_farm/" + site_id + "/" + zone_id + "/" + device_id + "/";
+String base_topic = "eaknakorn/" + site_id + "/" + zone_id + "/" + device_id + "/";
 
 unsigned long lastMsg = 0; 
 const unsigned long MQTT_RETRY_INTERVAL_MS = 5000;

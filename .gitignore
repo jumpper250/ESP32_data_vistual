@@ -16,3 +16,18 @@
 /std_lab_data/nodered/flows_cred.json
 /std_lab_data/nodered/node_modules/
 /std_lab_data/nodered/.npm/
+
+# Track Grafana configuration while keeping runtime database/plugins ignored
+!/std_lab_data/grafana/
+/std_lab_data/grafana/*
+!/std_lab_data/grafana/dashboards/
+/std_lab_data/grafana/dashboards/*
+!/std_lab_data/grafana/dashboards/smartfarm.json
+!/std_lab_data/grafana/provisioning/
+/std_lab_data/grafana/provisioning/*
+!/std_lab_data/grafana/provisioning/dashboards/
+/std_lab_data/grafana/provisioning/dashboards/*
+!/std_lab_data/grafana/provisioning/dashboards/smartfarm.yaml
+!/std_lab_data/grafana/provisioning/datasources/
+/std_lab_data/grafana/provisioning/datasources/*
+!/std_lab_data/grafana/provisioning/datasources/influxdb.yaml
